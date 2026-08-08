@@ -1,0 +1,2 @@
+Revoir les permission Linux
+Pratiquer Bash
