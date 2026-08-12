@@ -257,3 +257,140 @@ delete_service()
 ```
 
 Un programme devient ainsi plus facile à lire, tester et modifier.
+
+
+
+# Fichiers & exceptions
+
+## Lire un fichier
+
+```python
+with open("auth.log", "r") as fichier:
+    for ligne in fichier:
+        print(ligne, end="")
+```
+
+`with open()` permet d'ouvrir un fichier et de le refermer automatiquement à la fin du bloc.
+
+---
+
+## Découper une ligne avec split()
+
+```python
+ligne = "Failed password for root from 10.0.0.25"
+
+mots = ligne.split()
+
+print(mots)
+```
+
+Résultat :
+
+```text
+['Failed', 'password', 'for', 'root', 'from', '10.0.0.25']
+```
+
+Récupérer le dernier élément :
+
+```python
+adresse_ip = mots[-1]
+```
+
+---
+
+## FileNotFoundError
+
+Si un fichier n'existe pas :
+
+```python
+with open("auth.log", "r") as fichier:
+```
+
+Python peut déclencher :
+
+```text
+FileNotFoundError
+```
+
+Gestion avec `try / except` :
+
+```python
+try:
+    with open("auth.log", "r") as fichier:
+        for ligne in fichier:
+            print(ligne, end="")
+
+except FileNotFoundError as erreur:
+    print(f"ERREUR : fichier {erreur.filename} introuvable.")
+```
+
+L'objet `erreur` peut contenir plusieurs informations :
+
+```python
+erreur.filename
+erreur.errno
+erreur.strerror
+```
+
+---
+
+## Compter des occurrences avec un dictionnaire
+
+Exemple : compter les échecs par adresse IP.
+
+```python
+echecs_par_ip = {}
+
+if adresse_ip in echecs_par_ip:
+    echecs_par_ip[adresse_ip] += 1
+else:
+    echecs_par_ip[adresse_ip] = 1
+```
+
+Le dictionnaire peut alors devenir :
+
+```python
+{
+    "10.0.0.25": 3,
+    "172.16.1.44": 1
+}
+```
+
+Parcourir le résultat :
+
+```python
+for adresse, nombre_echec in echecs_par_ip.items():
+    print(adresse, nombre_echec)
+```
+
+---
+
+## Pattern d'analyse de logs
+
+```text
+ouvrir le fichier
+        ↓
+parcourir ligne par ligne
+        ↓
+filtrer les lignes intéressantes
+        ↓
+extraire les données
+        ↓
+compter / agréger
+        ↓
+afficher ou détecter
+```
+
+Exemple utilisé dans LogAnalyzer :
+
+```text
+Failed password
+        ↓
+extraire l'IP
+        ↓
+compter les échecs
+        ↓
+si échecs >= 3
+        ↓
+IP suspecte
+```
