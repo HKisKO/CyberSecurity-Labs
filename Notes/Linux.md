@@ -347,3 +347,165 @@ Exemples :
 kill 1234    # PID
 fg %1        # Job ID
 ```
+
+
+# Permissions avancées — Utilisateurs, groupes et umask
+
+## Permissions
+
+```text
+r = 4 → lecture
+w = 2 → écriture
+x = 1 → exécution
+```
+
+Les permissions s'appliquent à :
+
+```text
+owner | group | others
+```
+
+Exemples courants :
+
+```text
+600 → rw------- 
+640 → rw-r-----
+644 → rw-r--r--
+700 → rwx------
+750 → rwxr-x---
+755 → rwxr-xr-x
+```
+
+Principe du moindre privilège :
+
+> Ne donner que les permissions réellement nécessaires.
+
+Un droit `x` ne doit pas être ajouté à un fichier s'il n'a pas besoin d'être exécuté.
+
+---
+
+## Utilisateurs et groupes
+
+Informations sur l'utilisateur :
+
+```bash
+id
+groups
+```
+
+Rechercher un groupe :
+
+```bash
+getent group developers
+```
+
+Créer un groupe :
+
+```bash
+sudo groupadd developers
+```
+
+Ajouter un utilisateur à un groupe secondaire :
+
+```bash
+sudo usermod -aG developers utilisateur
+```
+
+```text
+-a → ajouter sans remplacer les groupes existants
+-G → groupes secondaires
+```
+
+Activer un groupe dans un nouveau shell :
+
+```bash
+newgrp developers
+```
+
+---
+
+## Propriétaire et groupe d'un fichier
+
+Changer le groupe propriétaire :
+
+```bash
+chgrp developers fichier
+```
+
+Changer le propriétaire :
+
+```bash
+sudo chown alice fichier
+```
+
+Changer propriétaire + groupe :
+
+```bash
+sudo chown alice:developers fichier
+```
+
+Résumé :
+
+```text
+chmod   → permissions
+chgrp   → groupe propriétaire
+chown   → propriétaire / groupe
+usermod → configuration de l'utilisateur et appartenance aux groupes
+```
+
+---
+
+## umask
+
+Afficher le masque :
+
+```bash
+umask
+```
+
+Permissions maximales de création :
+
+```text
+fichier    → 666
+répertoire → 777
+```
+
+Exemples :
+
+```text
+umask 0002
+→ fichier 664
+→ dossier 775
+
+umask 0022
+→ fichier 644
+→ dossier 755
+
+umask 0027
+→ fichier 640
+→ dossier 750
+
+umask 0077
+→ fichier 600
+→ dossier 700
+```
+
+`umask` retire des permissions lors de la création d'un fichier ou d'un répertoire.
+
+---
+
+## Méthode rapide d'audit
+
+```text
+ls -l
+  ↓
+Vérifier owner
+  ↓
+Vérifier group
+  ↓
+Vérifier rwx pour owner/group/others
+  ↓
+Déterminer les accès réellement nécessaires
+  ↓
+Retirer les permissions inutiles
+```
