@@ -206,3 +206,411 @@ moins d'adresses disponibles
       ↓
 sous-réseau plus petit
 ```
+
+
+
+# Diagnostic réseau Linux
+
+## Méthodologie
+
+Lorsqu'un problème réseau est signalé, diagnostiquer progressivement :
+
+```text
+Interface
+   ↓
+Configuration IP
+   ↓
+Routage
+   ↓
+Passerelle
+   ↓
+Connectivité Internet
+   ↓
+DNS
+   ↓
+Sockets / ports
+   ↓
+Processus / services
+```
+
+L'objectif est d'isoler le niveau de la panne avant d'agir.
+
+---
+
+## Interfaces réseau
+
+Afficher les interfaces :
+
+```bash
+ip link
+```
+
+États importants :
+
+```text
+UP         → interface administrativement activée
+LOWER_UP   → lien réseau présent
+NO-CARRIER → absence de lien physique
+DOWN       → lien/interface non opérationnel
+```
+
+Interfaces courantes :
+
+```text
+lo       → loopback
+enp...   → Ethernet
+wlp...   → Wi-Fi
+virbr... → bridge virtuel
+```
+
+---
+
+## Configuration IP
+
+```bash
+ip addr
+```
+
+Pour une interface précise :
+
+```bash
+ip addr show <interface>
+```
+
+Permet notamment d'identifier :
+
+```text
+adresse IPv4
+préfixe CIDR
+broadcast
+adresse MAC
+adresse IPv6
+```
+
+Exemple :
+
+```text
+10.54.209.93/24
+
+Réseau    → 10.54.209.0/24
+Masque    → 255.255.255.0
+Broadcast → 10.54.209.255
+```
+
+`dynamic` indique généralement une configuration obtenue automatiquement via DHCP.
+
+---
+
+## Routage
+
+Afficher la table de routage :
+
+```bash
+ip route
+```
+
+Exemple :
+
+```text
+default via 10.54.209.74 dev wlp2s0
+10.54.209.0/24 dev wlp2s0
+```
+
+Destination dans le même sous-réseau :
+
+```text
+machine → destination
+```
+
+Destination extérieure :
+
+```text
+machine
+   ↓
+passerelle / next hop
+   ↓
+autres réseaux
+```
+
+La route `default` est utilisée lorsqu'aucune route plus spécifique ne correspond à la destination.
+
+---
+
+## Diagnostic avec ping
+
+Tester d'abord la passerelle :
+
+```bash
+ping -c 4 <passerelle>
+```
+
+Puis tester Internet directement par IP :
+
+```bash
+ping -c 4 8.8.8.8
+```
+
+Puis tester la résolution de nom :
+
+```bash
+ping -c 4 google.com
+```
+
+Interprétation :
+
+```text
+Passerelle KO
+→ problème local / accès à la passerelle
+
+Passerelle OK
+IP publique KO
+→ problème de routage/connectivité extérieure possible
+
+IP publique OK
+Nom de domaine KO
+→ problème DNS possible
+```
+
+`ping` utilise ICMP. L'absence de réponse à un ping ne prouve pas à elle seule qu'un service ou une machine est indisponible.
+
+---
+
+## DNS
+
+Afficher la configuration DNS :
+
+```bash
+resolvectl status
+```
+
+Informations importantes :
+
+```text
+Current DNS Server
+DNS Servers
+```
+
+`DNS Servers` peut contenir plusieurs serveurs DNS.
+
+La configuration DNS peut notamment être :
+
+```text
+automatique → DHCP
+manuelle    → configuration réseau
+```
+
+Ne pas confondre :
+
+```text
+serveur DNS
+```
+
+avec :
+
+```text
+adresse IP retournée par le DNS pour un nom de domaine
+```
+
+---
+
+# TCP / UDP / Sockets
+
+## TCP
+
+TCP est orienté connexion.
+
+Établissement classique :
+
+```text
+SYN
+ ↓
+SYN-ACK
+ ↓
+ACK
+```
+
+C'est le `3-way handshake`.
+
+Un socket TCP attendant des connexions apparaît généralement comme :
+
+```text
+LISTEN
+```
+
+## UDP
+
+UDP est sans connexion.
+
+Il n'utilise pas le 3-way handshake TCP.
+
+Dans `ss`, un socket UDP apparaît généralement comme :
+
+```text
+UNCONN
+```
+
+---
+
+## Afficher les sockets
+
+```bash
+ss -tuln
+```
+
+Options :
+
+```text
+-t → TCP
+-u → UDP
+-l → listening
+-n → affichage numérique
+```
+
+Adresses importantes :
+
+```text
+127.0.0.1:PORT
+→ écoute locale / loopback
+
+0.0.0.0:PORT
+→ écoute sur les interfaces IPv4
+
+[::]:PORT
+→ écoute IPv6
+```
+
+---
+
+## Identifier le processus derrière un port
+
+```bash
+sudo ss -tulnp
+```
+
+Le `-p` affiche les informations concernant le processus propriétaire du socket.
+
+Relation :
+
+```text
+Port
+ ↓
+Socket
+ ↓
+Processus
+ ↓
+PID
+```
+
+Exemples rencontrés :
+
+```text
+22   → SSH / systemd socket activation
+80   → apache2
+3306 → mysqld
+8081 → bettercap
+```
+
+Attention :
+
+```bash
+grep "22"
+```
+
+cherche `22` partout dans une ligne et pas uniquement dans le numéro de port.
+
+---
+
+# systemd socket activation
+
+Certaines unités systemd peuvent écouter sur un socket et déclencher un service uniquement lorsqu'il est nécessaire.
+
+Exemple rencontré avec SSH :
+
+```text
+systemd
+   ↓
+ssh.socket
+   ↓
+écoute TCP :22
+   ↓
+connexion entrante
+   ↓
+trigger
+   ↓
+ssh.service
+   ↓
+sshd
+```
+
+Commandes utiles :
+
+```bash
+systemctl status ssh.socket
+systemctl status ssh.service
+systemctl list-sockets
+```
+
+Un service :
+
+```text
+inactive
+```
+
+n'est donc pas nécessairement inaccessible si une unité `.socket` correspondante est active.
+
+Ne pas confondre :
+
+```text
+enabled  → activation configurée au démarrage
+active   → unité actuellement active
+```
+
+---
+
+# Commandes essentielles
+
+```bash
+ip link
+ip addr
+ip route
+
+ping -c 4 <destination>
+
+resolvectl status
+
+ss -tuln
+sudo ss -tulnp
+
+systemctl status <unité>
+systemctl list-sockets
+```
+
+## Principe
+
+Toujours associer une commande à une question :
+
+```text
+ip link
+→ Mon interface et mon lien sont-ils opérationnels ?
+
+ip addr
+→ Ai-je une configuration IP ?
+
+ip route
+→ Où la machine va-t-elle envoyer le paquet ?
+
+ping
+→ La destination répond-elle à ICMP ?
+
+resolvectl
+→ Quelle configuration DNS est utilisée ?
+
+ss
+→ Quels sockets et ports sont présents ?
+
+ss -p
+→ Quel processus possède le socket ?
+
+systemctl
+→ Quel est l'état de l'unité correspondante ?
+```
