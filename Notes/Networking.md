@@ -614,3 +614,414 @@ ss -p
 systemctl
 → Quel est l'état de l'unité correspondante ?
 ```
+
+# DNS — Domain Name System
+
+## Rôle du DNS
+
+Le DNS permet notamment de résoudre un nom de domaine en adresse IP.
+
+```text
+google.com
+    ↓ DNS
+172.217.x.x
+```
+
+Une machine peut avoir une connectivité IP fonctionnelle mais une résolution DNS défaillante.
+
+```text
+ping 8.8.8.8     → FONCTIONNE
+ping google.com  → ÉCHEC
+
+→ problème DNS possible
+→ investigation nécessaire avant de conclure
+```
+
+---
+
+## DNS sous Ubuntu avec systemd-resolved
+
+Afficher la configuration utilisée par les clients locaux :
+
+```bash
+cat /etc/resolv.conf
+```
+
+Exemple :
+
+```text
+nameserver 127.0.0.53
+```
+
+`127.0.0.53` est le stub DNS local de `systemd-resolved`.
+
+Il ne faut pas le confondre avec le serveur DNS configuré sur l'interface réseau.
+
+Afficher la configuration DNS réelle :
+
+```bash
+resolvectl status
+```
+
+Exemple observé :
+
+```text
+Interface : wlp2s0
+Stub local : 127.0.0.53
+DNS réseau : 192.168.1.1
+```
+
+Chaîne simplifiée :
+
+```text
+Application
+     ↓
+127.0.0.53:53
+Stub local
+     ↓
+systemd-resolved
+     ↓
+wlp2s0
+     ↓
+192.168.1.1
+DNS réseau
+     ↓
+Infrastructure DNS
+```
+
+---
+
+## Listeners DNS locaux
+
+Afficher les processus écoutant sur le port DNS :
+
+```bash
+sudo ss -lntup | grep ':53'
+```
+
+Observé avec `systemd-resolved` :
+
+```text
+127.0.0.53:53
+127.0.0.54:53
+```
+
+`127.0.0.53` est le stub local principal utilisé via `/etc/resolv.conf`.
+
+`127.0.0.54` est un second listener local de `systemd-resolved` avec un fonctionnement de proxy plus direct.
+
+Le DNS utilise principalement :
+
+```text
+UDP/53
+```
+
+mais peut également utiliser :
+
+```text
+TCP/53
+```
+
+---
+
+## dig
+
+Résolution avec la configuration DNS normale :
+
+```bash
+dig google.com
+```
+
+Identifier notamment :
+
+```text
+status: NOERROR
+SERVER: 127.0.0.53#53
+```
+
+Interroger directement un serveur DNS :
+
+```bash
+dig @192.168.1.1 google.com
+```
+
+Tester un DNS alternatif :
+
+```bash
+dig @8.8.8.8 google.com
+```
+
+Syntaxe :
+
+```text
+dig @DNS domaine type
+```
+
+---
+
+## Principaux enregistrements DNS
+
+```text
+A      → adresse IPv4
+AAAA   → adresse IPv6
+NS     → serveurs DNS autoritatifs
+MX     → serveurs de messagerie
+CNAME  → alias vers un autre nom
+```
+
+Commandes :
+
+```bash
+dig google.com A
+dig google.com AAAA
+dig google.com NS
+dig google.com MX
+dig www.github.com CNAME
+```
+
+### MX
+
+Exemple :
+
+```text
+10 smtp.google.com.
+```
+
+`10` représente la priorité.
+
+Plus la valeur est faible, plus le serveur MX est prioritaire.
+
+### CNAME
+
+Exemple :
+
+```text
+www.github.com
+      ↓ CNAME
+github.com
+```
+
+`www.github.com` est l'alias.
+
+---
+
+## TTL
+
+TTL signifie :
+
+```text
+Time To Live
+```
+
+Exemple :
+
+```text
+google.com.   176   IN   A   172.217.x.x
+              ↑
+             TTL
+```
+
+Le TTL indique combien de temps une donnée DNS peut rester valide dans un cache.
+
+```text
+176 → 175 → 174 → ... → 0
+```
+
+À expiration, une nouvelle résolution est nécessaire si aucune autre réponse valide n'est disponible.
+
+---
+
+## Cache DNS
+
+Afficher les statistiques :
+
+```bash
+resolvectl statistics
+```
+
+Informations importantes :
+
+```text
+Current Cache Size
+Cache Hits
+Cache Misses
+```
+
+### Cache Hit
+
+```text
+requête
+   ↓
+réponse valide déjà en cache
+   ↓
+réutilisation
+```
+
+### Cache Miss
+
+```text
+requête
+   ↓
+réponse absente / inutilisable
+   ↓
+requête vers DNS amont
+```
+
+Vider le cache :
+
+```bash
+sudo resolvectl flush-caches
+```
+
+Tester :
+
+```bash
+resolvectl query google.com
+```
+
+Après vidage du cache :
+
+```text
+Data from: network
+```
+
+Une requête suivante peut donner :
+
+```text
+Data from: cache
+```
+
+Le cache conserve des réponses DNS obtenues précédemment. Il ne crée pas lui-même les informations DNS.
+
+---
+
+## Hiérarchie DNS
+
+Observer la résolution :
+
+```bash
+dig +trace google.com
+```
+
+Chaîne simplifiée :
+
+```text
+Root "."
+   ↓
+TLD ".com"
+   ↓
+Serveurs autoritatifs de google.com
+   ↓
+Enregistrement A
+   ↓
+Adresse IPv4
+```
+
+Le serveur Root indique où trouver les serveurs du TLD.
+
+Le TLD indique quels serveurs sont autoritatifs pour le domaine.
+
+Le serveur autoritatif fournit les données DNS du domaine.
+
+---
+
+## Diagnostic d'une panne DNS
+
+Scénario :
+
+```text
+ping 8.8.8.8
+→ FONCTIONNE
+
+ping google.com
+→ ÉCHEC
+```
+
+### 1. Vérifier la configuration
+
+```bash
+cat /etc/resolv.conf
+resolvectl status
+```
+
+### 2. Tester la résolution normale
+
+```bash
+dig google.com
+```
+
+### 3. Tester directement le DNS configuré
+
+```bash
+dig @192.168.1.1 google.com
+```
+
+### 4. Tester un DNS alternatif
+
+```bash
+dig @8.8.8.8 google.com
+```
+
+### Cas : problème local
+
+```text
+dig google.com
+→ ÉCHEC
+
+dig @192.168.1.1 google.com
+→ FONCTIONNE
+```
+
+Principal suspect :
+
+```text
+stub 127.0.0.53
+systemd-resolved
+configuration DNS locale
+```
+
+### Cas : DNS configuré suspect
+
+```text
+dig google.com
+→ ÉCHEC
+
+dig @192.168.1.1 google.com
+→ ÉCHEC
+
+dig @8.8.8.8 google.com
+→ FONCTIONNE
+```
+
+Principal suspect :
+
+```text
+DNS configuré sur l'interface
+ou chemin réseau vers celui-ci
+```
+
+---
+
+## Méthode à retenir
+
+```text
+IP fonctionne mais domaine échoue
+              ↓
+      suspecter DNS
+              ↓
+      /etc/resolv.conf
+              ↓
+       resolvectl status
+              ↓
+         dig domaine
+              ↓
+      dig @DNS_interface
+              ↓
+       dig @DNS_alternatif
+              ↓
+       comparer les résultats
+              ↓
+       isoler le problème
+```
+
+Ne pas modifier la configuration avant d'avoir identifié le maillon suspect.
