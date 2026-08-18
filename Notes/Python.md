@@ -537,3 +537,410 @@ Exemple :
 ```python
 mode_sortie, nom_rapport = configurer_sortie()
 ```
+
+
+# Python — Sockets TCP et gestion des erreurs
+
+## Créer une socket TCP IPv4
+
+Module :
+
+```python
+import socket
+```
+
+Création :
+
+```python
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+```
+
+Signification :
+
+```text
+AF_INET     → IPv4
+SOCK_STREAM → socket orientée flux → TCP
+```
+
+Une socket permet à un programme de communiquer via le réseau.
+
+---
+
+## Tester une connexion TCP
+
+```python
+resultat = sock.connect_ex((ip, port))
+```
+
+Exemple :
+
+```python
+resultat = sock.connect_ex(("127.0.0.1", 22))
+```
+
+`connect_ex()` tente d'établir une connexion TCP et retourne un code.
+
+```text
+0
+→ connexion réussie
+```
+
+Un résultat différent de `0` correspond à une erreur qu'il faut interpréter.
+
+---
+
+## Timeout
+
+```python
+sock.settimeout(1)
+```
+
+Permet de limiter le temps d'attente des opérations bloquantes de la socket.
+
+```text
+Connexion refusée
+→ une réponse indique que la connexion ne peut pas être établie
+
+Timeout
+→ aucune réponse exploitable dans le délai configuré
+```
+
+---
+
+## errno
+
+```python
+import errno
+```
+
+Permet d'utiliser des noms explicites pour les codes d'erreur système.
+
+```python
+if resultat == errno.ECONNREFUSED:
+    status = "FERME"
+
+elif resultat == errno.ETIMEDOUT:
+    status = "TIMEOUT"
+```
+
+À préférer à :
+
+```python
+if resultat == 111:
+```
+
+car le nom de l'erreur rend le code plus compréhensible.
+
+---
+
+## os.strerror()
+
+```python
+import os
+```
+
+Convertit un code d'erreur système en message lisible :
+
+```python
+os.strerror(resultat)
+```
+
+Exemple observé :
+
+```text
+111
+↓
+Connection refused
+```
+
+Différence :
+
+```text
+errno
+→ identifier/comparer une erreur
+
+os.strerror()
+→ afficher le message associé à l'erreur
+```
+
+---
+
+## try / except / finally
+
+Structure :
+
+```python
+try:
+    # opération susceptible d'échouer
+
+except socket.error as erreur:
+    # traitement de l'erreur
+
+finally:
+    sock.close()
+```
+
+### try
+
+Exécute le code susceptible de produire une exception.
+
+### except
+
+Intercepte une exception.
+
+### finally
+
+S'exécute dans tous les cas.
+
+Même si un `return` se trouve dans `try`, le bloc `finally` est exécuté avant de quitter la fonction.
+
+Utile pour libérer des ressources :
+
+```python
+finally:
+    sock.close()
+```
+
+---
+
+## Exceptions socket
+
+Exception générale :
+
+```python
+except socket.error as erreur:
+```
+
+Exception plus spécifique liée à la résolution d'une adresse :
+
+```python
+except socket.gaierror as erreur:
+```
+
+Ordre recommandé :
+
+```python
+except socket.gaierror as erreur:
+    # erreur spécifique
+
+except socket.error as erreur:
+    # erreur plus générale
+```
+
+Toujours traiter l'exception spécifique avant l'exception générale.
+
+---
+
+## Valider une IPv4
+
+Module :
+
+```python
+import ipaddress
+```
+
+Validation :
+
+```python
+ipaddress.IPv4Address(ip)
+```
+
+Exemples :
+
+```text
+127.0.0.1    → valide
+192.168.1.10 → valide
+
+127.0.       → ValueError
+999.1.1.1    → ValueError
+::1          → ValueError pour IPv4Address
+```
+
+Gestion :
+
+```python
+try:
+    ipaddress.IPv4Address(ip)
+
+except ValueError:
+    print("Adresse IPv4 invalide.")
+```
+
+---
+
+## Validation utilisateur avec while
+
+```python
+while True:
+    try:
+        ip = input("Adresse IPv4 : ")
+
+        ipaddress.IPv4Address(ip)
+
+        break
+
+    except ValueError:
+        print("Adresse IPv4 invalide.")
+```
+
+Logique :
+
+```text
+input
+ ↓
+validation
+ ↓
+invalide → except → recommencer
+ ↓
+valide → break
+```
+
+---
+
+## Dictionnaires et .items()
+
+Exemple :
+
+```python
+services = {
+    22: "SSH",
+    80: "HTTP",
+    3306: "MySQL"
+}
+```
+
+Parcourir les clés et valeurs :
+
+```python
+for port, service in services.items():
+    print(port, service)
+```
+
+Produit successivement :
+
+```text
+22   SSH
+80   HTTP
+3306 MySQL
+```
+
+---
+
+## Séparer la logique dans une fonction
+
+Exemple :
+
+```python
+def verifier_port(ip, port):
+    # logique réseau
+    return status
+```
+
+Puis :
+
+```python
+for port, service in services.items():
+    statut = verifier_port(ip, port)
+    print(f"{ip}:{port} {service} → {statut}")
+```
+
+Principe :
+
+```text
+fonction
+→ effectue une tâche précise
+
+programme principal
+→ orchestre les différentes tâches
+```
+
+Cela rend le code plus lisible et réutilisable.
+
+---
+
+## Une ressource doit être libérée
+
+Lorsqu'une socket est créée :
+
+```python
+sock = socket.socket(...)
+```
+
+elle doit être fermée lorsqu'elle n'est plus nécessaire :
+
+```python
+sock.close()
+```
+
+Pour plusieurs connexions :
+
+```text
+itération 1
+→ créer socket
+→ utiliser
+→ fermer
+
+itération 2
+→ créer nouvelle socket
+→ utiliser
+→ fermer
+```
+
+Ne pas essayer de réutiliser une socket déjà fermée.
+
+---
+
+# Schéma à retenir
+
+```text
+input utilisateur
+       ↓
+validation
+       ↓
+boucle
+       ↓
+fonction
+       ↓
+création ressource
+       ↓
+try
+       ↓
+opération
+       ↓
+gestion du résultat
+       ↓
+except si exception
+       ↓
+finally
+       ↓
+libération ressource
+       ↓
+return
+```
+
+## Nouveaux concepts vus avec ServiceChecker V1
+
+```text
+socket
+AF_INET
+SOCK_STREAM
+connect_ex()
+settimeout()
+
+errno
+os.strerror()
+
+try
+except
+finally
+
+socket.error
+socket.gaierror
+
+ipaddress
+IPv4Address()
+
+.items()
+validation utilisateur
+gestion des ressources
+```
