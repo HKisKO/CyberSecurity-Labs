@@ -394,3 +394,146 @@ si échecs >= 3
         ↓
 IP suspecte
 ```
+
+## LogAnalyzer V2 — Concepts Python
+
+### Modes d'ouverture d'un fichier
+
+```python
+"r"  # lecture
+"w"  # écriture / remplacement
+"a"  # ajout à la fin
+"x"  # création exclusive
+```
+
+- `w` écrase le contenu existant.
+- `a` conserve le contenu et ajoute à la fin.
+- `x` provoque `FileExistsError` si le fichier existe déjà.
+
+### Lecture complète d'un fichier
+
+```python
+with open(nom_fichier, "r") as fichier:
+    lignes = fichier.readlines()
+```
+
+`readlines()` retourne une liste contenant les lignes du fichier.
+
+### Écriture dans un fichier
+
+```python
+with open(nom_rapport, "a") as fichier:
+    fichier.write("Résultat\n")
+```
+
+`write()` n'ajoute pas automatiquement de retour à la ligne contrairement à `print()`.
+
+### Ajouter un élément à une liste
+
+```python
+ip_echecs = []
+ip_echecs.append(adresse_ip)
+```
+
+### Trier selon une valeur
+
+```python
+classement = sorted(
+    dictionnaire.items(),
+    key=lambda element: element[1],
+    reverse=True
+)
+```
+
+- `element[0]` → clé
+- `element[1]` → valeur
+- `reverse=True` → ordre décroissant
+
+`sorted()` retourne ici une liste de tuples.
+
+### Exceptions travaillées
+
+```python
+FileNotFoundError
+FileExistsError
+ValueError
+```
+
+### Contrôle des boucles
+
+```python
+continue
+```
+
+Passe immédiatement à l'itération suivante.
+
+```python
+break
+```
+
+Quitte la boucle.
+
+```python
+return
+```
+
+Quitte la fonction et peut retourner une ou plusieurs valeurs.
+
+### Retourner plusieurs valeurs
+
+```python
+return nom_fichier, lignes
+```
+
+Puis :
+
+```python
+nom_fichier, lignes = lire_fichier()
+```
+
+### Construire progressivement une chaîne
+
+```python
+resultat = "===== ANALYSE =====\n"
+
+for adresse, nombre in classement:
+    resultat += f"{adresse} : {nombre}\n"
+```
+
+Le même résultat peut ensuite être envoyé vers différentes destinations :
+
+```python
+print(resultat)
+```
+
+ou :
+
+```python
+fichier.write(resultat)
+```
+
+### Principe de séparation
+
+Une analyse ne devrait pas être répétée simplement parce que sa destination change.
+
+```text
+Données
+  ↓
+Analyse
+  ↓
+Résultat
+  ↓
+Destination
+  ├── Terminal
+  └── Fichier
+```
+
+### Refactoring
+
+Lorsqu'un même bloc de logique est utilisé à plusieurs endroits, il peut être déplacé dans une fonction réutilisable.
+
+Exemple :
+
+```python
+mode_sortie, nom_rapport = configurer_sortie()
+```
